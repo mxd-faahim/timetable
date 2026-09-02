@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Timetable</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#24382b" id="themeColorMeta">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Timetable">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root {
+    --paper:#f6f3ea; --card:#fffdf6; --ink:#23281f; --muted:#7a7461;
+    --line:#cfc6ac; --head:#24382b; --head-ink:#fdfaf1; --daycol:#efe9d8;
+    --accent:#b25a34; --brk:#eae4d2; --btn:#35513e; --pick:#fff6e0;
+  }
+  html[data-theme="dark"] {
+    --paper:#16191a; --card:#1e2224; --ink:#e8e4d9; --muted:#938f83;
+    --line:#363c3f; --head:#0f1213; --head-ink:#e8e4d9; --daycol:#262b2d;
+    --accent:#d97a4e; --brk:#212527; --btn:#4a6b55; --pick:#2c2a20;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; background:var(--paper); color:var(--ink); }
+  body {
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding:calc(14px + env(safe-area-inset-top)) 12px calc(24px + env(safe-area-inset-bottom));
+  }
+  .bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+  button {
+    border:1px solid var(--btn); background:var(--btn); color:#fff;
+    padding:9px 15px; border-radius:7px;
+    font-size:13.5px; font-weight:600; font-family:inherit; cursor:pointer;
+  }
+  button:active { transform:scale(.97); }
+  button.ghost { background:transparent; color:var(--btn); }
+  html[data-theme="dark"] button.ghost { color:var(--ink); border-color:var(--line); }
+  button.accent { background:var(--accent); border-color:var(--accent); }
+  button.icon { padding:9px 12px; font-size:15px; }
+  .status { font-size:12px; color:var(--muted); margin-left:auto; min-height:16px; }
+
+  .scroll {
+    overflow-x:auto; border:1px solid var(--line);
+    border-radius:8px; background:var(--card); -webkit-overflow-scrolling:touch;
+  }
+  table { border-collapse:collapse; width:100%; min-width:640px; }
+  th, td { border:1px solid var(--line); padding:0; text-align:center; vertical-align:middle; }
+  thead th {
+    background:var(--head); color:var(--head-ink);
+    font-size:11.5px; font-weight:600; padding:8px 4px; position:sticky; top:0; z-index:2;
+  }
+  thead .time { display:block; font-weight:400; font-size:10px; opacity:.75; margin-top:2px; }
+  tbody th {
+    background:var(--daycol); color:var(--ink); font-size:12.5px; font-weight:700;
+    padding:6px 10px; white-space:nowrap; position:sticky; left:0; z-index:1;
+  }
+  td.cell { min-width:88px; height:54px; font-size:12.5px; line-height:1.35; padding:3px; }
+  td.cell .fac { display:block; font-size:9.5px; letter-spacing:.2px; color:var(--muted); margin-top:2px; }
+  td.cell.free { color:var(--line); }
+  td.brk {
+    background:var(--brk); color:var(--muted); font-size:10.5px; font-style:italic;
+    writing-mode:vertical-rl; text-orientation:mixed; padding:6px 3px;
+  }
+  tr.today th { background:var(--accent); color:#fff; }
+  td.cell select {
+    width:100%; height:44px; border:1px solid var(--accent); border-radius:5px;
+    background:var(--pick); color:var(--ink);
+    font-family:inherit; font-size:12px; padding:2px; -webkit-appearance:none; appearance:none;
+    text-align:center; text-align-last:center;
+  }
+
+  details { margin-top:16px; font-size:12px; }
+  summary { cursor:pointer; font-weight:600; padding:6px 0; color:var(--ink); }
+  details table { min-width:0; border:none; }
+  details td { padding:6px; border:none; border-bottom:1px solid var(--line); text-align:left; }
+  td.code { font-weight:700; color:var(--accent); white-space:nowrap; }
+  td.sub { font-size:11.5px; }
+  td.sub small { display:block; color:var(--muted); }
+  .note { margin-top:14px; font-size:11.5px; color:var(--muted); line-height:1.55; }
+  input[type=file] { display:none; }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <button id="editBtn">Edit</button>
+  <button id="saveBtn" class="accent" hidden>Save</button>
+  <button id="cancelBtn" class="ghost" hidden>Cancel</button>
+  <button id="themeBtn" class="ghost icon">◐</button>
+  <span class="status" id="status"></span>
+</div>
+
+<div class="scroll">
+  <table id="grid">
+    <thead><tr id="headRow"><th>Day</th></tr></thead>
+    <tbody id="body"></tbody>
+  </table>
+</div>
+
+<details>
+  <summary>Codes &amp; faculty</summary>
+  <table><tbody id="legend"></tbody></table>
+</details>
+
+<details>
+  <summary>Backup</summary>
+  <div style="padding:8px 0; display:flex; gap:8px; flex-wrap:wrap;">
+    <button class="ghost" id="exportBtn">Export file</button>
+    <button class="ghost" id="importBtn">Import file</button>
+    <button class="ghost" id="resetBtn">Reset</button>
+    <input type="file" id="fileInput" accept=".json,application/json">
+  </div>
+</details>
+
+<details id="syncPanel">
+  <summary>Sync across devices</summary>
+  <div style="padding:8px 0">
+    <p class="note" style="margin-top:0">Paste a GitHub token once on each device. After that, Save updates every device.</p>
+    <input type="password" id="tokenInput" placeholder="GitHub token (ghp_… or github_pat_…)"
+           style="width:100%; padding:9px; border:1px solid var(--line); border-radius:6px;
+                  background:var(--card); color:var(--ink); font-family:inherit; font-size:12.5px;">
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+      <button class="ghost" id="tokenSave">Save token</button>
+      <button class="ghost" id="tokenClear">Remove token</button>
+      <button class="ghost" id="pullBtn">Pull latest</button>
+    </div>
+    <p class="note" id="syncInfo"></p>
+  </div>
+</details>
+
+<p class="note">Tap Edit, then pick a subject from the list in any box. Tap Save when done.</p>
+
+<script>
+const PERIODS = [
+  { id:"I",    time:"09.15–10.00" },
+  { id:"II",   time:"10.00–10.45" },
+  { id:"tea1", label:"Tea", brk:true },
+  { id:"III",  time:"11.00–11.45" },
+  { id:"IV",   time:"11.45–12.30" },
+  { id:"lunch",label:"Lunch", brk:true },
+  { id:"V",    time:"01.20–02.05" },
+  { id:"VI",   time:"02.05–02.50" },
+  { id:"tea2", label:"Tea", brk:true },
+  { id:"VII",  time:"03.05–03.50" },
+  { id:"VIII", time:"03.50–04.30" }
+];
+const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+const CHOICES = [
+  "DBMS","JP","CS","FLAT","CAO","HVE","FOM","BCL-I",
+  "PM DBMS","PM OOPS","PM DSA","PM COM","Free"
+];
+
+const CODES = {
+  "DBMS":"23CBT301", "JP":"23CBT302", "CS":"23MAT303", "FLAT":"23CBT303",
+  "CAO":"23ECT305", "HVE":"23CST701", "FOM":"23CBT501", "BCL-I":"23CW3311",
+  "PM DBMS":"23CBT301", "PM OOPS":"23CBT302"
+};
+
+const ORIGINAL = {
+  Monday:    { I:"CS", II:"CAO", III:"JP", IV:"DBMS", V:"PM DSA", VI:"PM DSA", VII:"PM DSA", VIII:"PM DSA" },
+  Tuesday:   { I:"FOM", II:"DBMS", III:"FLAT", IV:"CS", V:"PM OOPS", VI:"PM OOPS", VII:"PM OOPS", VIII:"PM OOPS" },
+  Wednesday: { I:"PM COM", II:"PM COM", III:"FLAT", IV:"CAO", V:"HVE", VI:"CS", VII:"BCL-I", VIII:"BCL-I" },
+  Thursday:  { I:"JP", II:"FOM", III:"CAO", IV:"JP", V:"PM OOPS", VI:"PM OOPS", VII:"PM COM", VIII:"PM COM" },
+  Friday:    { I:"PM COM", II:"PM COM", III:"FLAT", IV:"DBMS", V:"HVE", VI:"FOM", VII:"DBMS", VIII:"CAO" },
+  Saturday:  { I:"JP", II:"FOM", III:"CS", IV:"FLAT", V:"PM DBMS", VI:"PM DBMS", VII:"PM DBMS", VIII:"PM DBMS" }
+};
+
+const LEGEND = [
+  ["DBMS",    "Database Management Systems", "23CBT301 · Murugavel"],
+  ["JP",      "Java Programming", "23CBT302 · Mr.M.Balasubramani"],
+  ["CS",      "Computational Statistics", "23MAT303 · Dr.Jemi"],
+  ["FLAT",    "Formal Language and Automata Theory", "23CBT303 · Mr.G.Gowdham Siddharth"],
+  ["CAO",     "Computer Architecture and Organization", "23ECT305 · Mrs.V.Nandhini"],
+  ["HVE",     "Human Values and Ethics", "23CST701 · Mr.S.Muthukumar"],
+  ["FOM",     "Fundamentals of Management", "23CBT501 · Mrs.Suba"],
+  ["BCL-I",   "Business Communication Laboratory-I", "23CW3311 · Mr.K.Mangalaraj"],
+  ["PM DBMS", "Placement — DBMS Lab", ""],
+  ["PM OOPS", "Placement — OOPS Lab", ""],
+  ["PM DSA",  "Placement — Data Structures and Algorithms", ""],
+  ["PM COM",  "Placement — Communication", ""]
+];
+
+const KEY = "timetable-data-v3", TKEY = "timetable-theme";
+let mem = {};
+const store = {
+  get(k){ try { return localStorage.getItem(k); } catch(e){ return mem[k] || null; } },
+  set(k,v){ try { localStorage.setItem(k,v); return true; } catch(e){ mem[k]=v; return false; } }
+};
+
+let data = (() => {
+  try { const raw = store.get(KEY); if (raw) return JSON.parse(raw); } catch(e){}
+  return JSON.parse(JSON.stringify(ORIGINAL));
+})();
+
+let editing = false, snapshot = null;
+const grid = document.getElementById("grid");
+const bodyEl = document.getElementById("body");
+const statusEl = document.getElementById("status");
+
+function applyTheme(t){
+  document.documentElement.dataset.theme = t;
+  document.getElementById("themeBtn").textContent = t === "dark" ? "☀" : "☾";
+  document.getElementById("themeColorMeta").content = t === "dark" ? "#16191a" : "#24382b";
+}
+let theme = store.get(TKEY) ||
+  (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+applyTheme(theme);
+document.getElementById("themeBtn").onclick = () => {
+  theme = theme === "dark" ? "light" : "dark";
+  applyTheme(theme); store.set(TKEY, theme);
+};
+
+function setStatus(m){
+  statusEl.textContent = m;
+  if (m) setTimeout(() => { if (statusEl.textContent === m) statusEl.textContent = ""; }, 2500);
+}
+
+const headRow = document.getElementById("headRow");
+PERIODS.forEach(p => {
+  const th = document.createElement("th");
+  if (p.brk) { th.textContent = p.label; th.style.opacity = ".7"; }
+  else th.innerHTML = p.id + '<span class="time">' + p.time + '</span>';
+  headRow.appendChild(th);
+});
+
+function paint(td, val){
+  td.textContent = "";
+  td.classList.toggle("free", val === "Free" || !val);
+  if (!val) { td.textContent = "—"; return; }
+  td.appendChild(document.createTextNode(val));
+  const code = CODES[val];
+  if (code) {
+    const s = document.createElement("span");
+    s.className = "fac"; s.textContent = code;
+    td.appendChild(s);
+  }
+}
+
+function buildSelect(val){
+  const sel = document.createElement("select");
+  CHOICES.forEach(item => {
+    const o = document.createElement("option");
+    o.value = item; o.textContent = item;
+    sel.appendChild(o);
+  });
+  if (val && !CHOICES.includes(val)) {
+    const o = document.createElement("option");
+    o.value = val; o.textContent = val;
+    sel.insertBefore(o, sel.firstChild);
+  }
+  sel.value = val || "Free";
+  return sel;
+}
+
+function render(){
+  const today = DAYS[new Date().getDay() - 1] || null;
+  bodyEl.innerHTML = "";
+  DAYS.forEach(day => {
+    const tr = document.createElement("tr");
+    if (day === today) tr.className = "today";
+    const th = document.createElement("th");
+    th.textContent = day;
+    tr.appendChild(th);
+    PERIODS.forEach(p => {
+      const td = document.createElement("td");
+      if (p.brk) { td.className = "brk"; td.textContent = p.label; }
+      else {
+        td.className = "cell";
+        td.dataset.day = day; td.dataset.period = p.id;
+        const val = data[day][p.id] || "";
+        if (editing) td.appendChild(buildSelect(val));
+        else paint(td, val);
+      }
+      tr.appendChild(td);
+    });
+    bodyEl.appendChild(tr);
+  });
+}
+
+const legendEl = document.getElementById("legend");
+LEGEND.forEach(([c, name, meta]) => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = '<td class="code"></td><td class="sub"></td>';
+  tr.children[0].textContent = c;
+  tr.children[1].textContent = name;
+  const small = document.createElement("small");
+  small.textContent = meta;
+  tr.children[1].appendChild(small);
+  legendEl.appendChild(tr);
+});
+
+function toggleUI(){
+  document.getElementById("editBtn").hidden = editing;
+  document.getElementById("saveBtn").hidden = !editing;
+  document.getElementById("cancelBtn").hidden = !editing;
+}
+
+document.getElementById("editBtn").onclick = () => {
+  snapshot = JSON.parse(JSON.stringify(data));
+  editing = true; toggleUI(); render();
+  setStatus("Tap a box to pick from the list");
+};
+
+document.getElementById("saveBtn").onclick = () => {
+  grid.querySelectorAll("td.cell select").forEach(sel => {
+    const td = sel.parentElement;
+    data[td.dataset.day][td.dataset.period] = sel.value;
+  });
+  const ok = store.set(KEY, JSON.stringify(data));
+  editing = false; toggleUI(); render();
+  setStatus(ok ? "Saved" : "Saved for now — storage blocked here");
+  if (token()) push().then(done => { if (done) setStatus("Saved & synced"); });
+};
+
+document.getElementById("cancelBtn").onclick = () => {
+  data = snapshot || data;
+  editing = false; toggleUI(); render();
+  setStatus("Changes discarded");
+};
+
+document.getElementById("resetBtn").onclick = () => {
+  if (!confirm("Reset to the original timetable?")) return;
+  data = JSON.parse(JSON.stringify(ORIGINAL));
+  store.set(KEY, JSON.stringify(data));
+  editing = false; toggleUI(); render();
+  setStatus("Reset done");
+};
+
+document.getElementById("exportBtn").onclick = () => {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type:"application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "timetable-backup.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  setStatus("Exported");
+};
+
+document.getElementById("importBtn").onclick = () => document.getElementById("fileInput").click();
+document.getElementById("fileInput").onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const parsed = JSON.parse(r.result);
+      DAYS.forEach(d => { if (!parsed[d]) throw new Error("bad"); });
+      data = parsed; store.set(KEY, JSON.stringify(data)); render();
+      setStatus("Imported");
+    } catch(err){ setStatus("That file couldn't be read"); }
+  };
+  r.readAsText(f);
+  e.target.value = "";
+};
+
+/* ---------- GitHub sync ---------- */
+const TOKEN_KEY = "timetable-token", SHA_KEY = "timetable-sha";
+const syncInfo = document.getElementById("syncInfo");
+
+function repoInfo(){
+  const host = location.hostname;               // mxd-faahim.github.io
+  const parts = location.pathname.split("/").filter(Boolean);
+  if (!host.endsWith("github.io")) return null;
+  const owner = host.split(".")[0];
+  const repo = parts.length ? parts[0] : owner + ".github.io";
+  return { owner, repo };
+}
+
+function b64(str){
+  const bytes = new TextEncoder().encode(str);
+  let bin = "";
+  bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+
+function token(){ return store.get(TOKEN_KEY) || ""; }
+
+function apiUrl(){
+  const r = repoInfo();
+  return r ? "https://api.github.com/repos/" + r.owner + "/" + r.repo + "/contents/data.json" : null;
+}
+
+function showSync(msg){ if (syncInfo) syncInfo.textContent = msg; }
+
+async function pull(quiet){
+  const url = apiUrl();
+  if (!url) { if (!quiet) showSync("Sync needs the GitHub Pages version of this page."); return; }
+  try {
+    const headers = { "Accept": "application/vnd.github+json" };
+    if (token()) headers.Authorization = "Bearer " + token();
+    const res = await fetch(url + "?t=" + Date.now(), { headers, cache: "no-store" });
+    if (res.status === 404) { showSync("No data.json in the repo yet — Save once to create it."); return; }
+    if (!res.ok) throw new Error(res.status);
+    const json = await res.json();
+    store.set(SHA_KEY, json.sha);
+    const text = decodeURIComponent(escape(atob(json.content.replace(/\s/g, ""))));
+    const parsed = JSON.parse(text);
+    DAYS.forEach(d => { if (!parsed[d]) throw new Error("bad"); });
+    data = parsed;
+    store.set(KEY, JSON.stringify(data));
+    render();
+    showSync("Up to date with the repo.");
+    if (!quiet) setStatus("Pulled latest");
+  } catch (e) {
+    showSync("Offline or not reachable — showing the copy on this device.");
+  }
+}
+
+async function push(){
+  const url = apiUrl();
+  if (!url || !token()) return false;
+  try {
+    let sha = store.get(SHA_KEY);
+    if (!sha) {
+      const probe = await fetch(url, { headers: { Authorization: "Bearer " + token() }, cache: "no-store" });
+      if (probe.ok) sha = (await probe.json()).sha;
+    }
+    const body = {
+      message: "Update timetable",
+      content: b64(JSON.stringify(data, null, 2))
+    };
+    if (sha) body.sha = sha;
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: { Authorization: "Bearer " + token(), "Accept": "application/vnd.github+json" },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(res.status);
+    const json = await res.json();
+    store.set(SHA_KEY, json.content.sha);
+    showSync("Pushed to the repo. Other devices get it on next open.");
+    return true;
+  } catch (e) {
+    store.set(SHA_KEY, "");
+    showSync("Push failed — check the token has Contents write access.");
+    return false;
+  }
+}
+
+document.getElementById("tokenSave").onclick = () => {
+  const v = document.getElementById("tokenInput").value.trim();
+  if (!v) { showSync("Paste a token first."); return; }
+  store.set(TOKEN_KEY, v);
+  document.getElementById("tokenInput").value = "";
+  showSync("Token saved on this device. Save now pushes to the repo.");
+};
+document.getElementById("tokenClear").onclick = () => {
+  store.set(TOKEN_KEY, "");
+  showSync("Token removed. This device saves locally only.");
+};
+document.getElementById("pullBtn").onclick = () => pull(false);
+
+if (token()) showSync("Token is set on this device.");
+
+render();
+pull(true);
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
+</script>
+</body>
+</html>

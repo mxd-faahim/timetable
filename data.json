@@ -1,0 +1,8 @@
+{
+  "Monday":    { "I":"CS", "II":"CAO", "III":"JP", "IV":"DBMS", "V":"PM DSA", "VI":"PM DSA", "VII":"PM DSA", "VIII":"PM DSA" },
+  "Tuesday":   { "I":"FOM", "II":"DBMS", "III":"FLAT", "IV":"CS", "V":"PM OOPS", "VI":"PM OOPS", "VII":"PM OOPS", "VIII":"PM OOPS" },
+  "Wednesday": { "I":"PM COM", "II":"PM COM", "III":"FLAT", "IV":"CAO", "V":"HVE", "VI":"CS", "VII":"BCL-I", "VIII":"BCL-I" },
+  "Thursday":  { "I":"JP", "II":"FOM", "III":"CAO", "IV":"JP", "V":"PM OOPS", "VI":"PM OOPS", "VII":"PM COM", "VIII":"PM COM" },
+  "Friday":    { "I":"PM COM", "II":"PM COM", "III":"FLAT", "IV":"DBMS", "V":"HVE", "VI":"FOM", "VII":"DBMS", "VIII":"CAO" },
+  "Saturday":  { "I":"JP", "II":"FOM", "III":"CS", "IV":"FLAT", "V":"PM DBMS", "VI":"PM DBMS", "VII":"PM DBMS", "VIII":"PM DBMS" }
+}
